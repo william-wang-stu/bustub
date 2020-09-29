@@ -18,6 +18,7 @@
 
 #include "buffer/replacer.h"
 #include "common/config.h"
+//  #include "common/logger.h"
 
 namespace bustub {
 
@@ -47,6 +48,16 @@ class ClockReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
+  struct clock_element{
+    bool isPin;
+    bool isRef;
+  };
+
+  std::vector<clock_element> clock_replacer_list;
+  size_t clock_size;
+  size_t clock_hand;
+
+  std::mutex clock_mutex;
 };
 
 }  // namespace bustub
