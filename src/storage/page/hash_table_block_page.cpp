@@ -27,13 +27,13 @@ ValueType HASH_TABLE_BLOCK_TYPE::ValueAt(slot_offset_t bucket_ind) const {
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BLOCK_TYPE::Insert(slot_offset_t bucket_ind, const KeyType &key, const ValueType &value) {
-  if (!this->IsReadable(bucket_ind)){
+  if (!this->IsReadable(bucket_ind)) {
     // insert the key
     this->array_[bucket_ind] = {key, value};
-    
+
     // set bitmap
-    this->occupied_[bucket_ind/8] |= (1 << bucket_ind%8);
-    this->readable_[bucket_ind/8] |= (1 << bucket_ind%8);
+    this->occupied_[bucket_ind / 8] |= (1 << bucket_ind % 8);
+    this->readable_[bucket_ind / 8] |= (1 << bucket_ind % 8);
 
     return true;
   }
@@ -42,19 +42,19 @@ bool HASH_TABLE_BLOCK_TYPE::Insert(slot_offset_t bucket_ind, const KeyType &key,
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void HASH_TABLE_BLOCK_TYPE::Remove(slot_offset_t bucket_ind) {
-  if (this->IsOccupied(bucket_ind)){
-    this->readable_[bucket_ind/8] &= ~(1 << bucket_ind%8);
+  if (this->IsOccupied(bucket_ind)) {
+    this->readable_[bucket_ind / 8] &= ~(1 << bucket_ind % 8);
   }
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BLOCK_TYPE::IsOccupied(slot_offset_t bucket_ind) const {
-  return this->occupied_[bucket_ind/8] & (1 << (bucket_ind%8));
+  return this->occupied_[bucket_ind / 8] & (1 << (bucket_ind % 8));
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BLOCK_TYPE::IsReadable(slot_offset_t bucket_ind) const {
-  return this->readable_[bucket_ind/8] & (1 << (bucket_ind%8));
+  return this->readable_[bucket_ind / 8] & (1 << (bucket_ind % 8));
 }
 
 // DO NOT REMOVE ANYTHING BELOW THIS LINE

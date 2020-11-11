@@ -27,27 +27,27 @@ HASH_TABLE_TYPE::LinearProbeHashTable(const std::string &name, BufferPoolManager
                                       const KeyComparator &comparator, size_t num_buckets,
                                       HashFunction<KeyType> hash_fn)
     : buffer_pool_manager_(buffer_pool_manager), comparator_(comparator), hash_fn_(std::move(hash_fn)) {
-      // Hash Table Header Page
-      Page* page_ = this->buffer_pool_manager_->NewPage(&this->header_page_id_);
-      
-      page_->WLatch();
-      
-      HashTableHeaderPage* ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
-      ht_page->SetSize(num_buckets);
-      ht_page->SetPageId(this->header_page_id_);
+  // Hash Table Header Page
+  Page *page_ = this->buffer_pool_manager_->NewPage(&this->header_page_id_);
 
-      // Hash Table Block Pages
-      for(size_t i=0; i<num_buckets; i++){
-        page_id_t block_page_id_;
-        this->buffer_pool_manager_->NewPage(&block_page_id_);
-        ht_page->AddBlockPageId(block_page_id_);
-        this->buffer_pool_manager_->UnpinPage(block_page_id_, false);
-      }
+  page_->WLatch();
 
-      // 
-      page_->WUnlatch();
-      this->buffer_pool_manager_->UnpinPage(this->header_page_id_, true);
-    }
+  HashTableHeaderPage *ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
+  ht_page->SetSize(num_buckets);
+  ht_page->SetPageId(this->header_page_id_);
+
+  // Hash Table Block Pages
+  for (size_t i = 0; i < num_buckets; i++) {
+    page_id_t block_page_id_;
+    this->buffer_pool_manager_->NewPage(&block_page_id_);
+    ht_page->AddBlockPageId(block_page_id_);
+    this->buffer_pool_manager_->UnpinPage(block_page_id_, false);
+  }
+
+  //
+  page_->WUnlatch();
+  this->buffer_pool_manager_->UnpinPage(this->header_page_id_, true);
+}
 
 /*****************************************************************************
  * SEARCH
@@ -58,7 +58,7 @@ bool HASH_TABLE_TYPE::GetValue(Transaction *transaction, const KeyType &key, std
 
   Page *page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
   page_->RLatch();
-  HashTableHeaderPage* ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
+  HashTableHeaderPage *ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
 
   // Get Block Index & Bucket Index
   size_t ht_length = ht_page->NumBlocks();
@@ -70,28 +70,29 @@ bool HASH_TABLE_TYPE::GetValue(Transaction *transaction, const KeyType &key, std
   size_t block_page_id = ht_page->GetBlockPageId(block_index);
   Page *bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
   bpage_->RLatch();
-  HashTableBlockPage<KeyType,ValueType,KeyComparator>* block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+  HashTableBlockPage<KeyType, ValueType, KeyComparator> *block_page =
+      reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
 
   // Linear Probe Search
-  while(block_page->IsOccupied(bucket_index)){
+  while (block_page->IsOccupied(bucket_index)) {
     // Find Correct Key
-    if (block_page->IsReadable(bucket_index) && comparator_(block_page->KeyAt(bucket_index),key) == 0){
+    if (block_page->IsReadable(bucket_index) && comparator_(block_page->KeyAt(bucket_index), key) == 0) {
       result->push_back(block_page->ValueAt(bucket_index));
     }
 
     // After Each Cycle
     bucket_index++;
     // Already A Block
-    if (bucket_index + block_index * BLOCK_ARRAY_SIZE == index){
+    if (bucket_index + block_index * BLOCK_ARRAY_SIZE == index) {
       break;
     }
 
     // Switch to Another Block
-    if (bucket_index == BLOCK_ARRAY_SIZE){
+    if (bucket_index == BLOCK_ARRAY_SIZE) {
       bucket_index = 0;
       bpage_->RUnlatch();
       this->buffer_pool_manager_->UnpinPage(block_page_id, false);
-    
+
       // Fetch New Page for New Block
       block_index++;
       block_index %= ht_length;
@@ -99,11 +100,11 @@ bool HASH_TABLE_TYPE::GetValue(Transaction *transaction, const KeyType &key, std
 
       bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
       bpage_->RLatch();
-      block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+      block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
     }
   }
 
-  //  
+  //
   bpage_->RUnlatch();
   this->buffer_pool_manager_->UnpinPage(block_page_id, false);
 
@@ -112,7 +113,7 @@ bool HASH_TABLE_TYPE::GetValue(Transaction *transaction, const KeyType &key, std
 
   table_latch_.RUnlock();
 
-  return result->size() > 0;
+  return !result->empty();
 }
 /*****************************************************************************
  * INSERTION
@@ -122,7 +123,7 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
   table_latch_.RLock();
   Page *page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
   page_->RLatch();
-  HashTableHeaderPage* ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
+  HashTableHeaderPage *ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
 
   // Get Block Index & Bucket Index
   size_t ht_length = ht_page->NumBlocks();
@@ -134,12 +135,13 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
   size_t block_page_id = ht_page->GetBlockPageId(block_index);
   Page *bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
   bpage_->WLatch();
-  HashTableBlockPage<KeyType,ValueType,KeyComparator>* block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+  HashTableBlockPage<KeyType, ValueType, KeyComparator> *block_page =
+      reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
 
   // Linear Probe Search
-  while(block_page->Insert(bucket_index, key, value) == false){
+  while (!block_page->Insert(bucket_index, key, value)) {
     // Completely the Same
-    if (comparator_(block_page->KeyAt(bucket_index),key) == 0 && block_page->ValueAt(bucket_index) == value){
+    if (comparator_(block_page->KeyAt(bucket_index), key) == 0 && block_page->ValueAt(bucket_index) == value) {
       bpage_->WUnlatch();
       this->buffer_pool_manager_->UnpinPage(block_page_id, false);
       page_->RUnlatch();
@@ -147,12 +149,12 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
 
       return false;
     }
-    
+
     // After Each Cycle
     bucket_index++;
     // Already A Block, which means the Block is Full
     // So we need to resize the block
-    if (bucket_index + block_index * BLOCK_ARRAY_SIZE == index){
+    if (bucket_index + block_index * BLOCK_ARRAY_SIZE == index) {
       bpage_->WUnlatch();
       this->buffer_pool_manager_->UnpinPage(block_page_id, false);
       page_->RUnlatch();
@@ -163,7 +165,7 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
       /******* Re--Get Header page and Block page *******/
       page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
       page_->RLatch();
-      ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
+      ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
 
       // Get Block Index & Bucket Index
       ht_length = ht_page->NumBlocks();
@@ -175,15 +177,15 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
       block_page_id = ht_page->GetBlockPageId(block_index);
       bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
       bpage_->WLatch();
-      block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+      block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
     }
 
     // Switch to Another Block
-    if (bucket_index == BLOCK_ARRAY_SIZE){
+    if (bucket_index == BLOCK_ARRAY_SIZE) {
       bucket_index = 0;
       bpage_->WUnlatch();
       this->buffer_pool_manager_->UnpinPage(block_page_id, false);
-    
+
       // Fetch New Page for New Block
       block_index++;
       block_index %= ht_length;
@@ -191,11 +193,11 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
 
       bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
       bpage_->WLatch();
-      block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+      block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
     }
   }
 
-  //  
+  //
   bpage_->WUnlatch();
   this->buffer_pool_manager_->UnpinPage(block_page_id, false);
   page_->RUnlatch();
@@ -214,7 +216,7 @@ bool HASH_TABLE_TYPE::Remove(Transaction *transaction, const KeyType &key, const
   table_latch_.RLock();
   Page *page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
   page_->RLatch();
-  HashTableHeaderPage* ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
+  HashTableHeaderPage *ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
 
   // Get Block Index & Bucket Index
   size_t ht_length = ht_page->NumBlocks();
@@ -226,45 +228,47 @@ bool HASH_TABLE_TYPE::Remove(Transaction *transaction, const KeyType &key, const
   size_t block_page_id = ht_page->GetBlockPageId(block_index);
   Page *bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
   bpage_->WLatch();
-  HashTableBlockPage<KeyType,ValueType,KeyComparator>* block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+  HashTableBlockPage<KeyType, ValueType, KeyComparator> *block_page =
+      reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
 
   // Linear Probe Search
-  while(block_page->IsOccupied(bucket_index)){
+  while (block_page->IsOccupied(bucket_index)) {
     //  Completely the Same
-    if (comparator_(block_page->KeyAt(bucket_index),key) == 0 && block_page->ValueAt(bucket_index) == value){
-      if (block_page->IsReadable(bucket_index)){
+    if (comparator_(block_page->KeyAt(bucket_index), key) == 0 && block_page->ValueAt(bucket_index) == value) {
+      if (block_page->IsReadable(bucket_index)) {
         block_page->Remove(bucket_index);
 
         bpage_->WUnlatch();
         this->buffer_pool_manager_->UnpinPage(block_page_id, false);
         page_->RUnlatch();
         this->buffer_pool_manager_->UnpinPage(this->header_page_id_, false);
-        
+
         return true;
       }
-      else{
-        bpage_->WUnlatch();
-        this->buffer_pool_manager_->UnpinPage(block_page_id, false);
-        page_->RUnlatch();
-        this->buffer_pool_manager_->UnpinPage(this->header_page_id_, false);
 
-        return false;
-      }
+      //  else
+      bpage_->WUnlatch();
+      this->buffer_pool_manager_->UnpinPage(block_page_id, false);
+      page_->RUnlatch();
+      this->buffer_pool_manager_->UnpinPage(this->header_page_id_, false);
+
+      return false;
+      
     }
 
     // After Each Cycle
     bucket_index++;
     // Already A Block
-    if (bucket_index + block_index * BLOCK_ARRAY_SIZE == index){
+    if (bucket_index + block_index * BLOCK_ARRAY_SIZE == index) {
       break;
     }
 
     // Switch to Another Block
-    if (bucket_index == BLOCK_ARRAY_SIZE){
+    if (bucket_index == BLOCK_ARRAY_SIZE) {
       bucket_index = 0;
       bpage_->WUnlatch();
       this->buffer_pool_manager_->UnpinPage(block_page_id, false);
-    
+
       // Fetch New Page for New Block
       block_index++;
       block_index %= ht_length;
@@ -272,11 +276,11 @@ bool HASH_TABLE_TYPE::Remove(Transaction *transaction, const KeyType &key, const
 
       bpage_ = this->buffer_pool_manager_->FetchPage(block_page_id);
       bpage_->WLatch();
-      block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(bpage_->GetData());
+      block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(bpage_->GetData());
     }
   }
 
-  //  
+  //
   bpage_->WUnlatch();
   this->buffer_pool_manager_->UnpinPage(block_page_id, false);
   page_->RUnlatch();
@@ -296,14 +300,14 @@ void HASH_TABLE_TYPE::Resize(size_t initial_size) {
   size_t new_bucket_num = new_size / BLOCK_ARRAY_SIZE;
 
   page_id_t new_header_page_id = INVALID_PAGE_ID;
-  Page* page_ = this->buffer_pool_manager_->NewPage(&new_header_page_id);
+  Page *page_ = this->buffer_pool_manager_->NewPage(&new_header_page_id);
   page_->WLatch();
-  HashTableHeaderPage* ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
+  HashTableHeaderPage *ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
   ht_page->SetSize(new_bucket_num);
   ht_page->SetPageId(new_header_page_id);
 
   // Allocate New Block Pages
-  for(size_t i=0; i<new_bucket_num; i++){
+  for (size_t i = 0; i < new_bucket_num; i++) {
     page_id_t block_page_id_ = INVALID_PAGE_ID;
     this->buffer_pool_manager_->NewPage(&block_page_id_);
     ht_page->AddBlockPageId(block_page_id_);
@@ -311,19 +315,20 @@ void HASH_TABLE_TYPE::Resize(size_t initial_size) {
   }
 
   // Move Key-Value Pair
-  Page* old_page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
+  Page *old_page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
   old_page_->RLatch();
-  HashTableHeaderPage* old_ht_page = reinterpret_cast<HashTableHeaderPage*>(old_page_->GetData());
+  HashTableHeaderPage *old_ht_page = reinterpret_cast<HashTableHeaderPage *>(old_page_->GetData());
   size_t old_ht_page_length = old_ht_page->NumBlocks();
 
-  for(size_t block_index=0; block_index<old_ht_page_length; block_index++){
+  for (size_t block_index = 0; block_index < old_ht_page_length; block_index++) {
     page_id_t old_bpage_id = old_ht_page->GetBlockPageId(block_index);
-    Page* old_bpage = this->buffer_pool_manager_->FetchPage(old_bpage_id);
+    Page *old_bpage = this->buffer_pool_manager_->FetchPage(old_bpage_id);
     old_bpage->RLatch();
-    HashTableBlockPage<KeyType,ValueType,KeyComparator>* old_block_page = reinterpret_cast<HashTableBlockPage<KeyType,ValueType,KeyComparator>*>(old_bpage);
+    HashTableBlockPage<KeyType, ValueType, KeyComparator> *old_block_page =
+        reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(old_bpage);
 
-    for(size_t bucket_index=0; bucket_index<BLOCK_ARRAY_SIZE; bucket_index++){
-      if (old_block_page->IsReadable(bucket_index)){
+    for (size_t bucket_index = 0; bucket_index < BLOCK_ARRAY_SIZE; bucket_index++) {
+      if (old_block_page->IsReadable(bucket_index)) {
         KeyType key = old_block_page->KeyAt(bucket_index);
         ValueType value = old_block_page->ValueAt(bucket_index);
 
@@ -336,7 +341,7 @@ void HASH_TABLE_TYPE::Resize(size_t initial_size) {
     this->buffer_pool_manager_->DeletePage(old_bpage_id);
   }
 
-  // 
+  //
   page_id_t old_header_page_id = this->header_page_id_;
   this->header_page_id_ = new_header_page_id;
 
@@ -357,7 +362,7 @@ size_t HASH_TABLE_TYPE::GetSize() {
 
   Page *page_ = this->buffer_pool_manager_->FetchPage(this->header_page_id_);
   page_->RLatch();
-  HashTableHeaderPage* ht_page = reinterpret_cast<HashTableHeaderPage*>(page_->GetData());
+  HashTableHeaderPage *ht_page = reinterpret_cast<HashTableHeaderPage *>(page_->GetData());
 
   size_t block_num = ht_page->NumBlocks();
   table_size = BLOCK_ARRAY_SIZE * block_num;

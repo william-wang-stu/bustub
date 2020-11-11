@@ -48,7 +48,7 @@ class ClockReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
-  struct clock_element{
+  struct clock_element {
     bool isPin;
     bool isRef;
   };

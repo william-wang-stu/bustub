@@ -43,13 +43,13 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   // 2.     If R is dirty, write it back to the disk.
   // 3.     Delete R from the page table and insert P.
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
-  
+
   std::scoped_lock buffer_pool_lock{this->latch_};
 
   //  1.
   //  1.1
   std::unordered_map<page_id_t, frame_id_t>::const_iterator iter = this->page_table_.find(page_id);
-  if(iter != this->page_table_.end()){
+  if (iter != this->page_table_.end()) {
     this->replacer_->Pin(iter->second);
     this->pages_[iter->second].pin_count_++;
     return &this->pages_[iter->second];
@@ -57,20 +57,18 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 
   //  1.2
   frame_id_t fetch_frame_id = INVALID_PAGE_ID;
-  if(this->free_list_.empty() == false){
+  if (!this->free_list_.empty()) {
     fetch_frame_id = this->free_list_.front();
     this->free_list_.pop_front();
-  }
-  else if(this->replacer_->Victim(&fetch_frame_id) == true){
+  } else if (this->replacer_->Victim(&fetch_frame_id)) {
     page_id_t fetch_page_id = this->pages_[fetch_frame_id].GetPageId();
-    if(this->pages_[fetch_frame_id].is_dirty_ == true){
+    if (this->pages_[fetch_frame_id].is_dirty_) {
       //  2.
       this->FlushPageImpl(fetch_page_id);
     }
     //  3.1 Delete
     this->page_table_.erase(fetch_page_id);
-  }
-  else{
+  } else {
     return nullptr;
   }
 
@@ -93,21 +91,21 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 
   //  1. return false if not in buffer pool
   std::unordered_map<page_id_t, frame_id_t>::const_iterator iter = this->page_table_.find(page_id);
-  if(iter == this->page_table_.end()){
+  if (iter == this->page_table_.end()) {
     return false;
   }
 
   //  2. check pin_count
-  if(this->pages_[iter->second].pin_count_ <= 0){
+  if (this->pages_[iter->second].pin_count_ <= 0) {
     return false;
   }
 
   //  3. set is_dirty_ & pin_count_
-  this->pages_[iter->second].is_dirty_ = is_dirty | this->pages_[iter->second].is_dirty_;
+  this->pages_[iter->second].is_dirty_ = ((static_cast<int>(is_dirty) | static_cast<int>(this->pages_[iter->second].is_dirty_)) != 0);
   this->pages_[iter->second].pin_count_--;
 
   //  4. check Unpin
-  if(this->pages_[iter->second].pin_count_ == 0){
+  if (this->pages_[iter->second].pin_count_ == 0) {
     this->replacer_->Unpin(iter->second);
   }
 
@@ -119,19 +117,19 @@ bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
 
   //  1. find page
   std::unordered_map<page_id_t, frame_id_t>::const_iterator iter = this->page_table_.find(page_id);
-  if(iter == this->page_table_.end()){
+  if (iter == this->page_table_.end()) {
     return false;
   }
 
   //  2. write dirty page back
-  if(this->pages_[iter->second].is_dirty_ == false){
+  if (!this->pages_[iter->second].is_dirty_) {
     return false;
   }
-  else{
-    this->disk_manager_->WritePage(page_id, this->pages_[iter->second].data_);
-    this->pages_[iter->second].is_dirty_ = false;
-  }
 
+  //  else
+  this->disk_manager_->WritePage(page_id, this->pages_[iter->second].data_);
+  this->pages_[iter->second].is_dirty_ = false;
+  
   return false;
 }
 
@@ -146,17 +144,15 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
 
   //  2.
   frame_id_t fetch_frame_id = INVALID_PAGE_ID;
-  if(this->free_list_.empty() == false){
+  if (!this->free_list_.empty()) {
     fetch_frame_id = this->free_list_.front();
     this->free_list_.pop_front();
-  }
-  else if(this->replacer_->Victim(&fetch_frame_id) == false){
+  } else if (!this->replacer_->Victim(&fetch_frame_id)) {
     //  1.
     return nullptr;
-  }
-  else{
+  } else {
     page_id_t fetch_page_id = this->pages_[fetch_frame_id].GetPageId();
-    if(this->pages_[fetch_frame_id].is_dirty_ == true){
+    if (this->pages_[fetch_frame_id].is_dirty_) {
       //  2.
       this->FlushPageImpl(fetch_page_id);
     }
@@ -188,30 +184,30 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
 
   std::scoped_lock buffer_pool_lock{this->latch_};
 
-  //  1. 
+  //  1.
   std::unordered_map<page_id_t, frame_id_t>::const_iterator iter = this->page_table_.find(page_id);
-  if(iter == this->page_table_.end()){
+  if (iter == this->page_table_.end()) {
     this->disk_manager_->DeallocatePage(page_id);
     //  return true;
-  }
-  else{
-    //  2. 
-    if(this->pages_[iter->second].pin_count_ > 0){
+  } else {
+    //  2.
+    if (this->pages_[iter->second].pin_count_ > 0) {
       return false;
     }
-    else{
-      this->page_table_.erase(page_id);
-      
-      this->pages_[iter->second].ResetMemory();
-      this->pages_[iter->second].page_id_ = INVALID_PAGE_ID;
-      this->pages_[iter->second].pin_count_ = 0;
-      this->pages_[iter->second].is_dirty_ = false;
 
-      this->free_list_.push_back(iter->second);
+    //  else
+    this->page_table_.erase(page_id);
 
-      this->disk_manager_->DeallocatePage(page_id);
-      //  return true;
-    }
+    this->pages_[iter->second].ResetMemory();
+    this->pages_[iter->second].page_id_ = INVALID_PAGE_ID;
+    this->pages_[iter->second].pin_count_ = 0;
+    this->pages_[iter->second].is_dirty_ = false;
+
+    this->free_list_.push_back(iter->second);
+
+    this->disk_manager_->DeallocatePage(page_id);
+    //  return true;
+    
   }
 
   return true;
@@ -222,7 +218,7 @@ void BufferPoolManager::FlushAllPagesImpl() {
 
   std::scoped_lock buffer_pool_lock{this->latch_};
 
-  for(size_t i=0;i<this->pool_size_;i++){
+  for (size_t i = 0; i < this->pool_size_; i++) {
     this->FlushPageImpl(this->pages_[i].page_id_);
   }
 }
